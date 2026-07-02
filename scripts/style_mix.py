@@ -9,10 +9,10 @@ from torchvision import utils as vutils
 import argparse
 from tqdm import tqdm
 
-from models import weights_init, Discriminator, Generator
-from operation import copy_G_params, load_params, get_dir
-from operation import ImageFolder, InfiniteSamplerWrapper
-from diffaug import DiffAugment
+from FastGAN.models import weights_init, Discriminator, Generator
+from FastGAN.operation import copy_G_params, load_params, get_dir
+from FastGAN.operation import ImageFolder, InfiniteSamplerWrapper
+from FastGAN.diffaug import DiffAugment
 
 
 

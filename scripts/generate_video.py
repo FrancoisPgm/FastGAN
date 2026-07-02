@@ -171,7 +171,7 @@ if __name__ == "__main__":
 
     load_model_err = 0
 
-    from models import Generator as Generator_freeform
+    from FastGAN.models import Generator as Generator_freeform
     
     frames_dist_folder = 'project_video_frames' # a folder to save generated images
     ckpt_path = './time_1024_1/models/180000.pth' # path to the checkpoint
