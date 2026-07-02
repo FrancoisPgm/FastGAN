@@ -86,11 +86,8 @@ class ImageFolder(Dataset):
         img_names.sort()
         for i in range(len(img_names)):
             image_path = os.path.join(self.root, img_names[i])
-            if (
-                image_path[-4:] == ".jpg"
-                or image_path[-4:] == ".png"
-                or image_path[-5:] == ".jpeg"
-            ):
+            ext = os.path.splitext(img_names[i])[1].lower()
+            if ext in ("jpg", "jpeg", "png"):
                 frame.append(image_path)
         return frame
 
