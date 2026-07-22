@@ -1,5 +1,4 @@
 import torch
-import torch.nn.functional as F
 from torchvision import utils as vutils
 
 import os
@@ -24,7 +23,7 @@ if __name__ == "__main__":
     noise_dim = 256
     device = torch.device(args.device)
 
-    net_ig = Generator(ngf=64, nz=noise_dim, nc=3, im_size=args.im_size)
+    net_ig = Generator(ngf=64, nz=noise_dim, im_size=args.im_size)
     net_ig.to(device)
 
     checkpoint = torch.load(args.ckpt, map_location=lambda a, b: a)
