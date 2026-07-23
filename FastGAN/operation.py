@@ -87,7 +87,7 @@ class ImageFolder(Dataset):
         for i in range(len(img_names)):
             image_path = os.path.join(self.root, img_names[i])
             ext = os.path.splitext(img_names[i])[1].lower()
-            if ext in (".jpg", ".jpeg", ".png"):
+            if ext in (".jpg", ".jpeg", ".png", ".JPG", ".JPEG", ".PNG"):
                 frame.append(image_path)
         return frame
 

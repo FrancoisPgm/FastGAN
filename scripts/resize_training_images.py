@@ -5,12 +5,14 @@ from pathlib import Path
 from tqdm import tqdm
 
 
-def resize_images(input_folder, output_folder, target_dim=2048):
+def resize_images(input_folder, output_folder, target_dim=1024):
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
 
     input_path = Path(input_folder)
-    image_files = list(input_path.glob("*.jpg")) + list(input_path.glob("*.jpeg"))
+    image_files = []
+    for ext in ("jpg", "jpeg", "JPG", "JPEG"):
+        image_files += list(input_path.glob(f"*.{ext}"))
 
     for img_path in tqdm(image_files):
         try:
@@ -38,7 +40,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Resize training images")
     parser.add_argument("-i", "--input-dir", type=str)
     parser.add_argument("-o", "--output-dir", type=str)
-    parser.add_argument("--size", type=int, default=2048, help="Largest dimension.")
+    parser.add_argument("--size", type=int, default=1024, help="Largest dimension.")
     args = parser.parse_args()
 
     resize_images(args.input_dir, args.output_dir, args.size)

@@ -10,7 +10,6 @@ from sam2.sam2_image_predictor import SAM2ImagePredictor
 from FastGAN.models import Generator
 
 
-GAN_CKPT = "/Users/fpaugam/Documents/code/capsule_fastgan/output/test_capsule/train_results/test_512_cpu_3/models/30000.pth"
 SAM2_CKPT = "/Users/fpaugam/Documents/code/capsule_fastgan/sam2/checkpoints/sam2.1_hiera_small.pt"
 SAM2_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 DEVICE = "cpu"
@@ -21,14 +20,17 @@ sam2_model = build_sam2(SAM2_CFG, SAM2_CKPT, device=device)
 predictor = SAM2ImagePredictor(sam2_model)
 
 
-def gen_image(ckpt, seed):
+def load_model(ckpt):
     net_ig = Generator(ngf=64, nz=256, im_size=IM_SIZE)
     net_ig.to(device)
     checkpoint = torch.load(ckpt, map_location=lambda a, b: a)
     net_ig.load_state_dict(checkpoint["g"])
     net_ig.eval()
     net_ig.to(device)
-    gen_im = net_ig(seed.to(device))[0][0].add(1).mul(0.5)
+    return net_ig
+
+def gen_image(model, seed):
+    gen_im = model(seed.to(device))[0][0].add(1).mul(0.5)
     gen_im = (
         gen_im.mul(255)
         .add_(0.5)
@@ -75,7 +77,7 @@ def paste_patch(image, gen_im, mask):
     return image
 
 
-def add_new_patch(image):
+def add_new_patch(model, image):
     seed = torch.randn(1, 256)
     point = np.array(
         [[np.random.randint(image.shape[0]), np.random.randint(image.shape[1])]]
@@ -84,12 +86,12 @@ def add_new_patch(image):
     if mask.sum() < 5:
         return image, None, seed
 
-    gen_im = gen_image(GAN_CKPT, seed)
+    gen_im = gen_image(model, seed)
 
     return paste_patch(image, gen_im, mask), mask, seed
 
 
-def update_patch(image, mask, seed, scale=0.01):
+def update_patch(model, image, mask, seed, scale=0.01):
     seed += scale * torch.randn(1, 256)
-    gen_im = gen_image(GAN_CKPT, seed)
+    gen_im = gen_image(model, seed)
     return paste_patch(image, gen_im, mask), seed
