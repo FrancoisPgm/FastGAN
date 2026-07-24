@@ -1,14 +1,10 @@
 import torch
 import cv2
 import numpy as np
-from pathlib import Path
-from PIL import Image
-from torchvision import utils as vutils
-import torch.nn.functional as F
+from FastGAN.models import Generator
+from FastGAN.invert_image import invert
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
-from FastGAN.models import Generator
-
 
 SAM2_CKPT = "/Users/fpaugam/Documents/code/capsule_fastgan/sam2/checkpoints/sam2.1_hiera_small.pt"
 SAM2_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
@@ -30,31 +26,31 @@ def load_model(ckpt):
     return net_ig
 
 def gen_image(model, seed):
-    gen_im = model(seed.to(device))[0][0].add(1).mul(0.5)
-    gen_im = (
-        gen_im.mul(255)
-        .add_(0.5)
-        .clamp_(0, 255)
-        .detach()
-        .permute(1, 2, 0)
-        .to("cpu", torch.uint8)
-        .numpy()
-    )
+    with torch.no_grad():
+        gen_im = model(seed.to(device))[0].add(1).mul(0.5)
+        gen_im = (
+            gen_im.mul(255)
+            .add_(0.5)
+            .clamp_(0, 255)
+            .detach()
+            .permute(0, 2, 3, 1)
+            .to("cpu", torch.uint8)
+            .numpy()
+        )
     return gen_im
 
 
-def segment_image(image, point):
+def segment_image(image, points):
     im_array = np.array(image)
     predictor.set_image(im_array)
 
     masks, _, _ = predictor.predict(
-        point_coords=point,
-        point_labels=np.array([1]),
+        point_coords=points,
+        point_labels=np.array([1]*len(points)),
         multimask_output=False,
     )
 
-    return masks[0]
-
+    return masks
 
 def get_bounding_box(mask):
     coords = np.argwhere(mask == 1)
@@ -63,6 +59,19 @@ def get_bounding_box(mask):
     width = (x_max - x_min) + 1
     height = (y_max - y_min) + 1
     return x_min, y_min, width, height
+
+
+def get_image_chunks(image, masks):
+    """Get the square chunks and bounding boxes for each mask resized to IM_SIZE."""
+    
+    boxes = []
+    chunks = []
+    for mask in masks:
+        x, y, w, h = get_bounding_box(mask)
+        chunks.append(cv2.resize(image[x:x+w, y:y+h], dsize=(IM_SIZE, IM_SIZE)))
+        boxes.append((x, y, w, h))
+    
+    return chunks, boxes
 
 
 def paste_patch(image, gen_im, mask):
@@ -77,16 +86,21 @@ def paste_patch(image, gen_im, mask):
     return image
 
 
-def add_new_patch(model, image):
+def add_new_patch(model, image, image_inversion):
     seed = torch.randn(1, 256)
     point = np.array(
         [[np.random.randint(image.shape[0]), np.random.randint(image.shape[1])]]
     )
-    mask = segment_image(image, point)
+    mask = segment_image(image, point)[0]
     if mask.sum() < 5:
         return image, None, seed
 
-    gen_im = gen_image(model, seed)
+    if image_inversion:
+        chunk = get_image_chunks(image, [mask])[0][0]
+        gen_im, seed = invert(model, chunk, n_iter=20)
+        gen_im = gen_im[0]
+    else:
+        gen_im = gen_image(model, seed)[0]
 
     return paste_patch(image, gen_im, mask), mask, seed
 

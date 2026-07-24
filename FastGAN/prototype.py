@@ -1,4 +1,5 @@
-from FastGAN.update_image import add_new_patch, update_patch, load_model
+import torch
+from FastGAN.update_image import add_new_patch, paste_patch, load_model, gen_image
 import time
 import numpy as np
 from PIL import Image
@@ -8,45 +9,45 @@ GAN_CKPT = "/Users/fpaugam/Documents/code/capsule_fastgan/output/test_capsule/tr
 im = Image.open("../../Images_eve_jpeg/IMG_5448.jpeg")
 im = np.array(im.convert("RGB"))
 
-# TODO: optimize with multiprocessing
-# IMG_SIZE = 1024
-# IMG_CHANNELS = 3
-# BUFFER_SIZE = 50
+image_inversion = True
 
-# # Total size needed for the image data buffer
-# BYTES_PER_IMAGE = IMG_SIZE * IMG_SIZE * IMG_CHANNELS
-# TOTAL_BUFFER_SIZE = BYTES_PER_IMAGE * BUFFER_SIZE
+# TODO: optimize with multiprocessings
+# maybe one for inverting images and one or two for updating patches
 
 window_name = "proto"
 cv2.namedWindow(window_name)
 
-patches = []
+masks = []
+all_seeds = None
 model = load_model(GAN_CKPT)
+model.eval()
+
+mask = None
+while mask is None:
+    im, mask, all_seeds = add_new_patch(model, im, image_inversion)
+masks.append(mask)
+
+display_img = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
+cv2.imshow(window_name, display_img)
+cv2.waitKey(1)
 
 while True:
-    im, mask, seed = add_new_patch(model, im)
+    im, mask, seed = add_new_patch(model, im, image_inversion)
     if mask is not None:
-        patches.append((mask, seed))
-    if len(patches) > 100:
-        patches.pop(0)
+        masks.append(mask)
+        all_seeds = np.vstack((all_seeds, seed))
+    if len(masks) > 30:
+        masks.pop(0)
+        all_seeds = all_seeds[1:]
     display_img = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
     cv2.imshow(window_name, display_img)
     cv2.waitKey(1)
 
     for _ in range(15):
-        for i in range(len(patches)):
-            mask, seed = patches[i]
-            im, new_seed = update_patch(model, im, mask, seed)
-            patches[i] = (mask, new_seed)
+        all_seeds += np.random.randn(*all_seeds.shape) * 0.1
+        new_gen_im = gen_image(model, torch.Tensor(all_seeds))
+        for i in range(len(masks)):
+            im = paste_patch(im, new_gen_im[i], masks[i])
         display_img = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
         cv2.imshow(window_name, display_img)
         cv2.waitKey(1)
-
-
-# def generate_images(shm_name):
-#     existing_shm = shared_memory.SharedMemory(name=shm_name)
-#     shared_images = np.ndarray(
-#         (BUFFER_SIZE, IMG_HEIGHT, IMG_WIDTH, IMG_CHANNELS),
-#         dtype=np.uint8,
-#         buffer=existing_shm.buf
-#     )
