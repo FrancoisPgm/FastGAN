@@ -1,5 +1,11 @@
 import torch
-from FastGAN.update_image import add_new_patch, paste_patch, load_model, gen_image
+from FastGAN.update_image import (
+    add_new_patch,
+    paste_patch,
+    load_model,
+    gen_image,
+    device,
+)
 import time
 import numpy as np
 from PIL import Image
@@ -45,7 +51,7 @@ while True:
 
     for _ in range(15):
         all_seeds += np.random.randn(*all_seeds.shape) * 0.1
-        new_gen_im = gen_image(model, torch.Tensor(all_seeds))
+        new_gen_im = gen_image(model, torch.Tensor(all_seeds).to(device))
         for i in range(len(masks)):
             im = paste_patch(im, new_gen_im[i], masks[i])
         display_img = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
