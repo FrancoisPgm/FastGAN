@@ -33,7 +33,7 @@ def invert(model, target_image, n_images=1, n_iter=100, print_best=False):
     # optimizer3 = optim.Adam([z], lr=0.01)
 
     for _ in tqdm(range(n_iter), desc="inverting"):
-        gen_im = model(z)[0].clamp_(-1, 1)
+        gen_im = model(z)[0].clamp(-1, 1)
         loss = percept(gen_im, target_image)
 
         # if i < n_iter // 4:
@@ -47,7 +47,7 @@ def invert(model, target_image, n_images=1, n_iter=100, print_best=False):
         loss.mean().backward()
         optimizer.step()
 
-    gen_im = model(z)[0].clamp_(-1, 1)
+    gen_im = model(z)[0].clamp(-1, 1)
     if print_best:
         best_i = 0
         best_loss = percept(gen_im[0:1], target_image[0:1])
