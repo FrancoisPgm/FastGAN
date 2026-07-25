@@ -7,13 +7,12 @@ from tqdm import tqdm
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
 
 from FastGAN.lpips import PerceptualLoss
+from FastGAN.conf import DEVICE
 
-
-DEVICE = torch.device("cpu")
-LATENT_DIM = 256
+device = torch.device(DEVICE)
 
 # percept = PerceptualLoss(model="net-lin", net="vgg", use_gpu=DEVICE == "cuda")
-percept = LearnedPerceptualImagePatchSimilarity(net_type="squeeze").to(DEVICE)
+percept = LearnedPerceptualImagePatchSimilarity(net_type="squeeze").to(device)
 
 
 def invert(model, target_image, n_images=1, n_iter=100, print_best=False):
@@ -23,13 +22,8 @@ def invert(model, target_image, n_images=1, n_iter=100, print_best=False):
         target_image = target_image.unsqueeze(0).expand(n_images, -1, -1, -1)
     else:
         n_images = target_image.shape[0]
-    target_image = target_image.to(DEVICE)
-    z = (
-        torch.Tensor(n_images, LATENT_DIM)
-        .normal_(0, 0.6)
-        .to(DEVICE)
-        .requires_grad_(True)
-    )
+    target_image = target_image.to(device)
+    z = torch.Tensor(n_images, 256).normal_(0, 0.6).to(device).requires_grad_(True)
 
     optimizer = optim.Adam([z], lr=0.01)
 

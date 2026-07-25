@@ -6,10 +6,7 @@ from FastGAN.invert_image import invert
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 
-SAM2_CKPT = "/Users/fpaugam/Documents/code/capsule_fastgan/sam2/checkpoints/sam2.1_hiera_small.pt"
-SAM2_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
-DEVICE = "cpu"
-IM_SIZE = 512
+from FastGAN.conf import DEVICE, SAM2_CFG, SAM2_CKPT, IM_SIZE
 
 device = torch.device(DEVICE)
 sam2_model = build_sam2(SAM2_CFG, SAM2_CKPT, device=device)

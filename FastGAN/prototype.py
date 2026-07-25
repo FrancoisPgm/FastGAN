@@ -11,8 +11,9 @@ import numpy as np
 from PIL import Image
 import cv2
 
-GAN_CKPT = "/Users/fpaugam/Documents/code/capsule_fastgan/output/test_capsule/train_results/test_512_cpu_3/models/30000.pth"
-im = Image.open("../../Images_eve_jpeg/IMG_5448.jpeg")
+from FastGAN.conf import GAN_CKPT, IM_PATH
+
+im = Image.open(IM_PATH)
 im = np.array(im.convert("RGB"))
 
 image_inversion = True
