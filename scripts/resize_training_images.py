@@ -11,7 +11,7 @@ def resize_images(input_folder, output_folder, target_dim=1024):
 
     input_path = Path(input_folder)
     image_files = []
-    for ext in ("jpg", "jpeg", "JPG", "JPEG"):
+    for ext in ("jpg", "jpeg"):
         image_files += list(input_path.glob(f"*.{ext}"))
 
     for img_path in tqdm(image_files):
