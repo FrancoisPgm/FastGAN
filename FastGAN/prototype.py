@@ -1,17 +1,16 @@
+import cv2
+import numpy as np
 import torch
+from PIL import Image
+
+from FastGAN.conf import GAN_CKPT, IM_PATH, N_ITER
 from FastGAN.update_image import (
     add_new_patch,
-    paste_patch,
-    load_model,
-    gen_image,
     device,
+    gen_image,
+    load_model,
+    paste_patch,
 )
-import time
-import numpy as np
-from PIL import Image
-import cv2
-
-from FastGAN.conf import GAN_CKPT, IM_PATH
 
 im = Image.open(IM_PATH)
 im = np.array(im.convert("RGB"))
@@ -31,7 +30,7 @@ model.eval()
 
 mask = None
 while mask is None:
-    im, mask, all_seeds = add_new_patch(model, im, image_inversion)
+    im, mask, all_seeds = add_new_patch(model, im, image_inversion, n_iter=N_ITER)
 masks.append(mask)
 
 display_img = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
@@ -39,7 +38,7 @@ cv2.imshow(window_name, display_img)
 cv2.waitKey(1)
 
 while True:
-    im, mask, seed = add_new_patch(model, im, image_inversion)
+    im, mask, seed = add_new_patch(model, im, image_inversion, n_iter=N_ITER)
     if mask is not None:
         masks.append(mask)
         all_seeds = np.vstack((all_seeds, seed))

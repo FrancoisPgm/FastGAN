@@ -6,3 +6,6 @@ SAM2_CKPT = "/Users/fpaugam/Documents/code/capsule_fastgan/sam2/checkpoints/sam2
 SAM2_CFG = "configs/sam2.1/sam2.1_hiera_s.yaml"
 DEVICE = "cpu"
 IM_SIZE = 512
+N_ITER = 6
+
+BOX_SIZE = 512

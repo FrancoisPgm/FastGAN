@@ -5,7 +5,6 @@ import cv2
 
 def process_image(rgba_img):
     # 1. Split the image into RGB and Alpha
-    # rgba_img shape is (720, 1280, 4)
     rgb = rgba_img[:, :, :3].copy()  # First 3 channels (RGB)
     alpha = rgba_img[:, :, 3:]  # The 4th channel (Alpha)
 
@@ -33,11 +32,11 @@ socket = context.socket(zmq.REP)
 socket.bind("tcp://*:5555")
 
 # Update these to match your actual Movie File In resolution
-WIDTH = 1280
-HEIGHT = 720
+WIDTH = 682
+HEIGHT = 512
 CHANNELS = 4
 
-print(f"Server started... Expecting {WIDTH}x{HEIGHT} RGBA images")
+print(f"Server started... Expecting {WIDTH}x{HEIGHT} images")
 
 while True:
     # Receive bytes

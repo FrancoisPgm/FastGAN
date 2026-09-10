@@ -1,13 +1,15 @@
 import argparse
+
 import numpy as np
 import torch
-import torch.optim as optim
 from PIL import Image
-from tqdm import tqdm
+from torch import optim
 from torchmetrics.image.lpip import LearnedPerceptualImagePatchSimilarity
+from tqdm import tqdm
 
-from FastGAN.lpips import PerceptualLoss
 from FastGAN.conf import DEVICE
+
+# from FastGAN.lpips import PerceptualLoss
 
 device = torch.device(DEVICE)
 
