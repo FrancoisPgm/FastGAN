@@ -67,7 +67,7 @@ def segment_image(image, points):
             min(p[0] + BOX_SIZE//2, image.shape[0]),
             min(p[1] + BOX_SIZE//2, image.shape[1])
         ] for p in points
-    ])
+    ])[0]
 
     masks, _, _ = predictor.predict(
         point_coords=points,
