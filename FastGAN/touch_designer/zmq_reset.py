@@ -1,7 +1,8 @@
 # DAT text
 
-import zmq_manager
 import time
+
+import zmq_manager
 
 # 1. Signal the thread to stop
 zmq_manager.stop_thread()
