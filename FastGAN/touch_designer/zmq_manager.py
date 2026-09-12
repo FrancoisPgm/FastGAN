@@ -1,12 +1,15 @@
-import queue
-import threading
+# text DAT
 
-import numpy as np
 import zmq
+import numpy as np
+import threading
+import queue
+import pickle
 
-# output_q size increased slightly to buffer the stream
-input_q = queue.Queue(maxsize=1)
-output_q = queue.Queue(maxsize=10)
+# receive queues size increased slightly to buffer the stream
+send_q = queue.Queue(maxsize=1)
+received_image_q = queue.Queue(maxsize=10)
+received_box_q = queue.Queue(maxsize=10)
 thread = None
 new_frame_event = threading.Event()
 stop_event = threading.Event()
@@ -26,8 +29,8 @@ def zmq_loop():
         try:
             # 1. NON-BLOCKING SEND: If a "Blast" image is in the queue, send it immediately
             try:
-                img = input_q.get_nowait()
-                socket.send(img.tobytes())
+                send_packet = send_q.get_nowait()
+                socket.send(pickle.dumps(send_packet))
                 print("ZMQ Thread: Blast image sent!")
             except queue.Empty:
                 pass
@@ -35,19 +38,17 @@ def zmq_loop():
             # 2. POLL FOR RECEIVE: Check if the server has pushed a new frame
             socks = dict(poller.poll(10))  # Short poll to keep loop responsive
             if socket in socks and socks[socket] == zmq.POLLIN:
-                reply = socket.recv()
-
-                # Process and push to output queue
-                processed_frame = np.frombuffer(reply, dtype=np.uint8).reshape(
-                    img.shape
-                )
+                reply = pickle.loads(socket.recv())
 
                 # To handle reshaping, we'll assume standard size or store last known shape
                 # For safety, we use a simple approach here:
-                if output_q.full():
-                    output_q.get()  # Drop oldest frame to keep stream real-time
+                if received_image_q.full():
+                    received_image_q.get()  # Drop oldest frame to keep stream real-time
+                if received_box_q.full():
+                    received_box_q.get()
 
-                output_q.put(processed_frame)
+                received_image_q.put(reply["image"].copy())
+                received_box_q.put(reply["box"].copy())
                 new_frame_event.set()
 
         except Exception as e:
@@ -71,7 +72,7 @@ def stop_thread():
         print("ZMQ Thread: Stopping...")
 
 
-def trigger_blast(source_op_name="switch1"):
+def send_image(source_op_name="switch1", is_blast=True):
     """
     Starts a new cycle by sending a frame to the Python server.
     """
@@ -79,15 +80,18 @@ def trigger_blast(source_op_name="switch1"):
     if top:
         # 1. Capture the current frame
         img = (top.numpyArray() * 255).astype(np.uint8)
+        packet = {"image": img, "is_blast": is_blast}
 
         # 2. Clear queues to ensure the new cycle starts fresh (no old frames)
-        while not input_q.empty():
-            input_q.get()
-        while not output_q.empty():
-            output_q.get()
+        while not send_q.empty():
+            send_q.get()
+        while not received_image_q.empty():
+            received_image_q.get()
+        while not received_box_q.empty():
+            received_box_q.get()
 
         # 3. Push the initial image to the background thread
-        input_q.put(img)
+        send_q.put(packet)
         print(f"Blast Triggered: Image from {source_op_name} in send queue.")
     else:
         print(f"Error: Could not find TOP named {source_op_name}")

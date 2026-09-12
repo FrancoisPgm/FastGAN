@@ -20,4 +20,4 @@ def onOffToOn(panelValue: PanelValue):
     """
     Called when a panel value changes from 0 to non-zero.
     """
-    zmq_manager.trigger_blast("movie1")
+    zmq_manager.send_image("movie1", is_blast=True)

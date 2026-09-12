@@ -5,7 +5,7 @@ import numpy as np
 
 
 def onCook(scriptOp):
-    q = zmq_manager.received_image_q
+    q = zmq_manager.received_box_q
 
     if not q.empty():
         # Pull the processed frame from the global queue

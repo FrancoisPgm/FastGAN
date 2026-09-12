@@ -1,10 +1,13 @@
 import cv2
 import numpy as np
 import torch
+import torch.nn as nn
+from PIL import Image
 from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
+from torchvision import transforms
 
-from FastGAN.conf import DEVICE, IM_SIZE, SAM2_CFG, SAM2_CKPT, BOX_SIZE
+from FastGAN.conf import BOX_SIZE, DEVICE, IM_SIZE, SAM2_CFG, SAM2_CKPT, CLASSIFIER_PATH, LABELS_PATH
 from FastGAN.models import Generator
 
 device = torch.device(DEVICE)
@@ -16,6 +19,8 @@ device = torch.device(DEVICE)
 # Loading it lazily means only the process that actually calls
 # segment_image() ever instantiates it.
 _predictor = None
+
+_classifier = None
 
 
 def get_predictor():
@@ -57,32 +62,33 @@ def gen_image(model, seed):
 
 
 def segment_image(image, points):
+    masks = None
     predictor = get_predictor()
     im_array = np.array(image)
     predictor.set_image(im_array)
-    boxes = np.array([
+    box = np.array([
         [
             max(0, p[0] - BOX_SIZE//2),
             max(0, p[1] - BOX_SIZE//2),
-            min(p[0] + BOX_SIZE//2, image.shape[0]),
-            min(p[1] + BOX_SIZE//2, image.shape[1])
+            min(p[0] + BOX_SIZE//2, image.shape[1]),
+            min(p[1] + BOX_SIZE//2, image.shape[0])
         ] for p in points
     ])[0]
 
-    masks, _, _ = predictor.predict(
+    masks, scores, _ = predictor.predict(
         point_coords=points,
         point_labels=np.array([1] * len(points)),
-        multimask_output=False,
-        box = boxes
+        multimask_output=True,
+        box = box
     )
 
-    return masks
+    return masks[scores.argmax()], box
 
 
 def get_bounding_box(mask):
     coords = np.argwhere(mask == 1)
-    x_min, y_min = coords.min(axis=0)
-    x_max, y_max = coords.max(axis=0)
+    y_min, x_min = coords.min(axis=0)
+    y_max, x_max = coords.max(axis=0)
     width = (x_max - x_min) + 1
     height = (y_max - y_min) + 1
     return x_min, y_min, width, height
@@ -94,7 +100,7 @@ def get_image_chunks(image, masks):
     chunks = []
     for mask in masks:
         x, y, w, h = get_bounding_box(mask)
-        chunks.append(cv2.resize(image[x : x + w, y : y + h], dsize=(IM_SIZE, IM_SIZE)))
+        chunks.append(cv2.resize(image[y : y + h, x : x + w], dsize=(IM_SIZE, IM_SIZE)))
         boxes.append((x, y, w, h))
     return chunks, boxes
 
@@ -107,33 +113,39 @@ def paste_patch(image, gen_im, mask):
     else:
         gen_im = gen_im[:, :box_size, :box_size]
 
-    image[mask == 1] = gen_im[:w, :h][mask[x : x + w, y : y + h] == 1]
-    return image
+    image[mask == 1] = gen_im[:h, :w][mask[y : y + h, x : x + w] == 1]
+    return image, (x, y, w, h)
 
 
-def add_new_patch(model, image, image_inversion, n_iter=5):
+def add_new_patch(model, image, image_inversion, n_iter=5, vflip=True):
     """Kept for non-multiprocessing / reference usage. The multiprocessing
     pipeline in mp_pipeline.py reimplements this split across the
     segmentation/display and inversion processes instead of calling it
     directly."""
-    from FastGAN.invert_image import invert  # local: only needed here
 
     seed = torch.randn(1, 256)
-    point = np.array(
-        [[np.random.randint(image.shape[0]), np.random.randint(image.shape[1])]]
-    )
-    mask = segment_image(image, point)[0]
-    if mask.sum() < 5:
-        return image, None, seed
+    mask = None
+    while mask is None or mask.sum() < 5:
+        point = np.array(
+            [[np.random.randint(image.shape[1]), np.random.randint(image.shape[0])]]
+        )
+        mask, box = segment_image(image, point)
 
     if image_inversion:
+        from FastGAN.invert_image import invert  # local: only needed here
+
         chunk = get_image_chunks(image, [mask])[0][0]
         gen_im, seed = invert(model, chunk, n_iter=n_iter)
         gen_im = gen_im[0]
     else:
         gen_im = gen_image(model, seed)[0]
 
-    return paste_patch(image, gen_im, mask), mask, seed
+    if vflip:
+        gen_im = gen_im[::-1]
+
+    image, box = paste_patch(image, gen_im, mask)
+
+    return image, mask, seed, box
 
 
 def update_patch(model, image, mask, seed, scale=0.01):
@@ -143,3 +155,66 @@ def update_patch(model, image, mask, seed, scale=0.01):
     seed += scale * torch.randn(1, 256)
     gen_im = gen_image(model, seed)
     return paste_patch(image, gen_im, mask), seed
+
+
+def add_patch_from_class(models, image, vflip=True):
+    seed = torch.randn(1, 256)
+    mask = None
+    while mask is None or mask.sum() < 5:
+        point = np.array(
+            [[np.random.randint(image.shape[1]), np.random.randint(image.shape[0])]]
+        )
+        mask, box = segment_image(image, point)
+
+    chunk = get_image_chunks(image, [mask])[0][0]
+    class_id = classify(chunk)
+
+    gen_im = gen_image(models[class_id], seed)[0]
+    
+    if vflip:
+        gen_im = gen_im[::-1]
+
+    image, box = paste_patch(image, gen_im, mask)
+    
+    return image, mask, seed, box
+    
+
+def classify(image):
+    global _classifier
+    preprocess = transforms.Compose(
+        [
+            transforms.Resize(256),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
+    )
+    img_tensor = preprocess(Image.fromarray(image))
+    if _classifier is None:
+        _classifier = load_classifier()
+    with torch.no_grad():
+        output = _classifier(img_tensor.unsqueeze(0))
+    class_id = output[0].argmax()
+
+    return class_id
+
+def load_labels_classifier(labels_path):
+    labels = []
+    with open(labels_path, "r") as f:
+        for line in f:
+            # Splitting "0: cats" into ["0", "cats"] and taking index 1
+            label = line.split(": ")[1].strip()
+            labels.append(label)
+    return labels
+
+def load_classifier():
+    from torchvision import models
+
+    labels = load_labels_classifier(LABELS_PATH)
+    model = models.resnet18(weights=None)
+    model.fc = nn.Linear(model.fc.in_features, len(labels))
+    state_dict = torch.load(CLASSIFIER_PATH, map_location=device)
+    model.load_state_dict(state_dict)
+    model.eval()
+    model = model.to(device)
+    return model

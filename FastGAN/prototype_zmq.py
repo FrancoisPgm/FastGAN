@@ -1,78 +1,108 @@
-import time
-
 import numpy as np
-import torch
+import pickle
 import zmq
 
-from FastGAN.conf import GAN_CKPT, IM_PATH, N_ITER
-from FastGAN.update_image import (
-    add_new_patch,
-    device,
-    gen_image,
-    load_model,
-    paste_patch,
-)
-
-WIDTH = 682
-HEIGHT = 512
-CHANNELS = 4
+from FastGAN.update_image import add_patch_from_class, load_model
 
 
-image_inversion = False
+keep_patches = True
+# keep_every = 10
 
 context = zmq.Context()
 socket = context.socket(zmq.PAIR)
 socket.bind("tcp://*:5555")
 
-print(f"Server started... Expecting {WIDTH}x{HEIGHT} images")
+print("Server started...")
 
-masks = []
-all_seeds = []
-model = load_model(GAN_CKPT)
-model.eval()
+models = []
+# models.append(
+#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/rocher.pth")
+# )
+# models.append(
+#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/arbre.pth")
+# )
+# models.append(
+#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/sol.pth")
+# )
+# models.append(
+#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/sol.pth")
+# )
+# models.append(
+#     load_model(
+#         "/Users/fpaugam/Documents/code/capsule_fastgan/test_models/feuillage.pth"
+#     )
+# )
+# models.append(
+#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/ciel.pth")
+# )
+# models.append(
+#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/metal.pth")
+# )
+
+
+models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
+models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
+models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
+models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
+models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
+models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
+models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
+for m in models:
+    m.eval()
 
 print("waiting for first blast")
-message = socket.recv()
+message = pickle.loads(socket.recv())
 print("First blast received")
-im = np.frombuffer(message, dtype=np.uint8).reshape(HEIGHT, WIDTH, CHANNELS).copy()
-alpha = np.zeros(im.shape[:2] + (1,), dtype=np.uint8)
+# im_init = np.frombuffer(message, dtype=np.uint8).reshape(HEIGHT, WIDTH, CHANNELS).copy()
+im_init = message["image"]
+im = im_init[:, :, :3].copy()
+alpha = im_init[:, :, 3:]
+total_mask = np.zeros(im_init.shape[:2])
+
+i = 1
 
 while True:
     # 1. Check for a "Blast" (New initial image)
     try:
         # Use NONBLOCK so the server doesn't stop processing the current loop
-        message = socket.recv(flags=zmq.NOBLOCK)
-        im = (
-            np.frombuffer(message, dtype=np.uint8)
-            .reshape(HEIGHT, WIDTH, CHANNELS)
-            .copy()
-        )
-        alpha = np.zeros(im.shape[:2] + (1,), dtype=np.uint8)
-        print("Blast received! Resetting loop.")
+        message = pickle.loads(socket.recv(flags=zmq.NOBLOCK))
+        # im_init = (
+        #     np.frombuffer(message, dtype=np.uint8)
+        #     .reshape(HEIGHT, WIDTH, CHANNELS)
+        #     .copy()
+        # )
+        im_init = message["image"]
+        im = im_init[:, :, :3].copy()
+        alpha = im_init[:, :, 3:]
+        if message["is_blast"]:
+            i = 1
+            total_mask = np.zeros(im_init.shape[:2])
+            print("Blast received! Resetting loop.")
+        else:
+            print("image received")
     except zmq.Again:
-        pass  # No new blast, keep processing
-    im = im[::-1, :, :3]
+        pass  # No image received, keep processing
 
-    im, mask, seed = add_new_patch(model, im, image_inversion, n_iter=N_ITER)
-    # alpha[:, :, 0] = np.clip((alpha[:, :, 0] + mask * 255).astype(np.uint8), 0, 255)
-    # alpha[:150, :150] = 255
-    if mask is not None:
-        masks.append(mask)
-        all_seeds.append(seed)
-    if len(masks) > 30:
-        masks.pop(0)
-        all_seeds = all_seeds[1:]
+    if not keep_patches:
+        im = im_init[:, :, :3].copy()
+        alpha = im_init[:, :, 3:]
 
-    im = np.concatenate([im[::-1], alpha], axis=2)
-    im[:, :, 0] *= np.clip(sum(masks), 0, 1).astype(np.uint8)
-    im[:, :, 1] *= np.clip(sum(masks), 0, 1).astype(np.uint8)
-    im[:, :, 2] *= np.clip(sum(masks), 0, 1).astype(np.uint8)
+    im, mask, seed, box = add_patch_from_class(models, im)
+    total_mask[mask == 1] = 1
 
-    socket.send(im.tobytes())
+    if not keep_patches:
+        total_mask = mask
 
-    # # update patches
-    # for _ in range(15):
-    #     all_seeds += np.random.randn(*all_seeds.shape) * 0.1
-    #     new_gen_im = gen_image(model, torch.Tensor(all_seeds).to(device))
-    #     for i in range(len(masks)):
-    #         im = paste_patch(im, new_gen_im[i], masks[i])
+    box_im = np.zeros((*im.shape[:2], 4), dtype=np.uint8)
+    rows, cols = np.where(mask == 1)
+    x, y, w, h = box
+    box_im[y, x : x + w - 1] = [255, 255, 255, 255]
+    box_im[y + h - 1, x : x + w - 1] = [255, 255, 255, 255]
+    box_im[y : y + h - 1, x] = [255, 255, 255, 255]
+    box_im[y : y + h - 1, x + w - 1] = [255, 255, 255, 255]
+
+    im_to_send = np.concatenate([im, alpha], axis=2).copy()
+    im_to_send[total_mask == 0, :] = 0
+
+    socket.send(pickle.dumps({"image": im_to_send, "box": box_im}))
+    i += 1
