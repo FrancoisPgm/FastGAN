@@ -108,10 +108,8 @@ def get_image_chunks(image, masks):
 def paste_patch(image, gen_im, mask):
     x, y, w, h = get_bounding_box(mask)  # maybe not redo that each time if too slow
     box_size = max(w, h)
-    if box_size > IM_SIZE:
-        gen_im = cv2.resize(gen_im, dsize=(box_size, box_size))
-    else:
-        gen_im = gen_im[:, :box_size, :box_size]
+    gen_im = cv2.resize(gen_im, dsize=(box_size, box_size))
+
 
     image[mask == 1] = gen_im[:h, :w][mask[y : y + h, x : x + w] == 1]
     return image, (x, y, w, h)
@@ -160,6 +158,9 @@ def update_patch(model, image, mask, seed, scale=0.01):
 def add_patch_from_class(models, image, vflip=True):
     seed = torch.randn(1, 256)
     mask = None
+    #class_id = None
+    #while class_id != 0:
+    #    mask = None
     while mask is None or mask.sum() < 5:
         point = np.array(
             [[np.random.randint(image.shape[1]), np.random.randint(image.shape[0])]]
