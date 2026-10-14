@@ -7,8 +7,10 @@ from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from torchvision import transforms
 
-from FastGAN.conf import BOX_SIZE, DEVICE, IM_SIZE, SAM2_CFG, SAM2_CKPT, CLASSIFIER_PATH, LABELS_PATH
+from FastGAN.conf import BOX_SIZE, DEVICE, IM_SIZE, SAM2_CFG, SAM2_CKPT, CLASSIFIER_PATH, LABELS_PATH, LABELS_TO_REPLACE
 from FastGAN.models import Generator
+
+LABELS = None
 
 device = torch.device(DEVICE)
 
@@ -156,26 +158,32 @@ def update_patch(model, image, mask, seed, scale=0.01):
 
 
 def add_patch_from_class(models, image, vflip=True):
+    global LABELS
+
     seed = torch.randn(1, 256)
     mask = None
-    #class_id = None
-    #while class_id != 0:
-    #    mask = None
+    if LABELS is None:
+        LABELS = load_labels_classifier(LABELS_PATH)
+
     while mask is None or mask.sum() < 5:
         point = np.array(
             [[np.random.randint(image.shape[1]), np.random.randint(image.shape[0])]]
         )
-        mask, box = segment_image(image, point)
+        mask, _ = segment_image(image, point)
 
     chunk = get_image_chunks(image, [mask])[0][0]
     class_id = classify(chunk)
+    class_name = LABELS[class_id]
 
-    gen_im = gen_image(models[class_id], seed)[0]
-    
-    if vflip:
-        gen_im = gen_im[::-1]
+    if class_name in LABELS_TO_REPLACE:
+        gen_im = gen_image(models[class_name], seed)[0]
+        
+        if vflip:
+            gen_im = gen_im[::-1]
 
-    image, box = paste_patch(image, gen_im, mask)
+        image, box = paste_patch(image, gen_im, mask)
+    else:
+        box = get_bounding_box(mask)
     
     return image, mask, seed, box
     
@@ -190,7 +198,7 @@ def classify(image):
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
         ]
     )
-    img_tensor = preprocess(Image.fromarray(image))
+    img_tensor = preprocess(Image.fromarray(image)).to(device)
     if _classifier is None:
         _classifier = load_classifier()
     with torch.no_grad():

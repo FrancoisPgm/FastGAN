@@ -1,9 +1,10 @@
+import time
 import numpy as np
 import pickle
 import zmq
 
 from FastGAN.update_image import add_patch_from_class, load_model
-
+from FastGAN.conf import MODELS_PATCHS
 
 keep_patches = True
 # keep_every = 10
@@ -14,40 +15,9 @@ socket.bind("tcp://*:5555")
 
 print("Server started...")
 
-models = []
-# models.append(
-#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/rocher.pth")
-# )
-# models.append(
-#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/arbre.pth")
-# )
-# models.append(
-#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/sol.pth")
-# )
-# models.append(
-#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/sol.pth")
-# )
-# models.append(
-#     load_model(
-#         "/Users/fpaugam/Documents/code/capsule_fastgan/test_models/feuillage.pth"
-#     )
-# )
-# models.append(
-#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/ciel.pth")
-# )
-# models.append(
-#     load_model("/Users/fpaugam/Documents/code/capsule_fastgan/test_models/metal.pth")
-# )
+models = {key: load_model(value) for key, value in MODELS_PATCHS.items()}
 
-
-models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
-models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
-models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
-models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
-models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
-models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
-models.append(load_model("/Users/fpaugam/Downloads/all_50000.pth"))
-for m in models:
+for m in models.values():
     m.eval()
 
 print("waiting for first blast")
@@ -106,3 +76,4 @@ while True:
 
     socket.send(pickle.dumps({"image": im_to_send, "box": box_im}))
     i += 1
+    time.sleep(0.5)
