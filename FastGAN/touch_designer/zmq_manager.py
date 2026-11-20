@@ -17,7 +17,7 @@ stop_event = threading.Event()
 def zmq_loop():
     global new_frame_event
     context = zmq.Context()
-    socket = context.socket(zmq.PAIR)  # Changed from REQ to PAIR
+    socket = context.socket(zmq.PAIR)
     socket.connect("tcp://localhost:5555")
 
     poller = zmq.Poller()
@@ -31,7 +31,7 @@ def zmq_loop():
             try:
                 send_packet = send_q.get_nowait()
                 socket.send(pickle.dumps(send_packet))
-                print("ZMQ Thread: Blast image sent!")
+                print("ZMQ Thread: image sent!")
             except queue.Empty:
                 pass
 
@@ -72,7 +72,7 @@ def stop_thread():
         print("ZMQ Thread: Stopping...")
 
 
-def send_image(source_op_name="switch1", is_blast=True):
+def send_image(source_op_name="switch1", is_blast=True, biome=None, sleep=0.0):
     """
     Starts a new cycle by sending a frame to the Python server.
     """
@@ -80,7 +80,7 @@ def send_image(source_op_name="switch1", is_blast=True):
     if top:
         # 1. Capture the current frame
         img = (top.numpyArray() * 255).astype(np.uint8)
-        packet = {"image": img, "is_blast": is_blast}
+        packet = {"image": img, "is_blast": is_blast, "biome": biome, "sleep": sleep}
 
         # 2. Clear queues to ensure the new cycle starts fresh (no old frames)
         while not send_q.empty():
@@ -92,6 +92,7 @@ def send_image(source_op_name="switch1", is_blast=True):
 
         # 3. Push the initial image to the background thread
         send_q.put(packet)
-        print(f"Blast Triggered: Image from {source_op_name} in send queue.")
+        if is_blast:
+            print(f"Blast Triggered: Image from {source_op_name} in send queue.")
     else:
         print(f"Error: Could not find TOP named {source_op_name}")
