@@ -1,4 +1,5 @@
 import cv2
+import os
 import numpy as np
 import torch
 import torch.nn as nn
@@ -7,7 +8,7 @@ from sam2.build_sam import build_sam2
 from sam2.sam2_image_predictor import SAM2ImagePredictor
 from torchvision import transforms
 
-from FastGAN.conf import BOX_SIZE, DEVICE, IM_SIZE, SAM2_CFG, SAM2_CKPT, CLASSIFIER_PATH, LABELS_PATH, LABELS_TO_REPLACE
+from FastGAN.conf import BOX_SIZE, DEVICE, IM_SIZE, SAM2_CFG, SAM2_CKPT, LABELS_TO_REPLACE
 from FastGAN.models import Generator
 
 LABELS = None
@@ -157,13 +158,10 @@ def update_patch(model, image, mask, seed, scale=0.01):
     return paste_patch(image, gen_im, mask), seed
 
 
-def add_patch_from_class(models, image, vflip=True):
-    global LABELS
+def add_patch_from_class(models, image, classifier, labels, vflip=True):
 
     seed = torch.randn(1, 256)
     mask = None
-    if LABELS is None:
-        LABELS = load_labels_classifier(LABELS_PATH)
 
     while mask is None or mask.sum() < 5:
         point = np.array(
@@ -172,8 +170,8 @@ def add_patch_from_class(models, image, vflip=True):
         mask, _ = segment_image(image, point)
 
     chunk = get_image_chunks(image, [mask])[0][0]
-    class_id = classify(chunk)
-    class_name = LABELS[class_id]
+    class_id = classify(chunk, classifier)
+    class_name = labels[class_id]
 
     if class_name in LABELS_TO_REPLACE:
         gen_im = gen_image(models[class_name], seed)[0]
@@ -188,8 +186,7 @@ def add_patch_from_class(models, image, vflip=True):
     return image, mask, seed, box
     
 
-def classify(image):
-    global _classifier
+def classify(image, classifier):
     preprocess = transforms.Compose(
         [
             transforms.Resize(256),
@@ -199,10 +196,8 @@ def classify(image):
         ]
     )
     img_tensor = preprocess(Image.fromarray(image)).to(device)
-    if _classifier is None:
-        _classifier = load_classifier()
     with torch.no_grad():
-        output = _classifier(img_tensor.unsqueeze(0))
+        output = classifier(img_tensor.unsqueeze(0))
     class_id = output[0].argmax()
 
     return class_id
@@ -216,14 +211,15 @@ def load_labels_classifier(labels_path):
             labels.append(label)
     return labels
 
-def load_classifier():
+def load_classifier(model_path):
     from torchvision import models
 
-    labels = load_labels_classifier(LABELS_PATH)
+    labels_path = os.path.join(os.path.dirname(model_path), "labels.txt")
+    labels = load_labels_classifier(labels_path)
     model = models.resnet18(weights=None)
     model.fc = nn.Linear(model.fc.in_features, len(labels))
-    state_dict = torch.load(CLASSIFIER_PATH, map_location=device)
+    state_dict = torch.load(model_path, map_location=device)
     model.load_state_dict(state_dict)
     model.eval()
     model = model.to(device)
-    return model
+    return model, labels
