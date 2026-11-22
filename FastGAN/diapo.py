@@ -63,7 +63,7 @@ while True:
     new_images = gen_image(model, batch_seeds)
 
     for k in range(BATCH_SIZE):
-        path = os.path.join(DIAPO_DIR, f"{biome}_generation_{i + k}.png")
+        path = os.path.join(DIAPO_DIR, f"{biome}_generation_{i + k:05d}.png")
         Image.fromarray(new_images[k]).save(path)
         created_images_paths.append(path)
 
